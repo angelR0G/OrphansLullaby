@@ -1,0 +1,184 @@
+#include "engine3D.hpp"
+#include <sstream>
+
+engine3D* engine3D::engineInstance(uint32_t const w, uint32_t const h){
+    if(pengine3D == 0){
+        // IrrIMGUI::CIMGUIEventReceiver EventReceiver;
+        // irr::SIrrlichtCreationParameters IrrlichtParams;
+        // IrrlichtParams.DriverType    = irr::video::EDT_OPENGL;
+        // IrrlichtParams.WindowSize    = irr::core::dimension2d<irr::u32>(w, h);
+        // IrrlichtParams.Bits          = 32;
+        // IrrlichtParams.Fullscreen    = false;
+        // IrrlichtParams.Stencilbuffer = true;
+        // IrrlichtParams.AntiAlias     = 16;
+        // IrrlichtParams.Vsync         = false;
+        // IrrlichtParams.EventReceiver = nullptr;
+        // pengine3D = std::unique_ptr<engine3D> ( new engine3D(w,h, IrrlichtParams, EventReceiver) );
+    }
+    return pengine3D.get();
+}
+
+engine3D* engine3D::engineInstance(){
+    if(pengine3D == 0){
+        return engineInstance(1920, 1080);
+    }
+    return pengine3D.get();
+}
+
+engine3D::engine3D(uint32_t const w, uint32_t const h, irr::SIrrlichtCreationParameters iparam, IrrIMGUI::CIMGUIEventReceiver eRec) : width_{w}, height_{h}, device_{irr::createDeviceEx(iparam), destroy}, IrrlichtParams{iparam}, EventReceiver{eRec}{
+
+    // pGUI = IrrIMGUI::createIMGUI(device_.get(), nullptr);
+    // driver_ = device_->getVideoDriver();
+    // smgr_   = device_->getSceneManager();
+    // guienv_ = device_->getGUIEnvironment();
+
+
+    // irr::core::dimension2du size = driver_->getScreenSize();
+    // if(!device_) throw std::runtime_error("Couldn't initialize device\n");
+
+    // createSkyBox();
+}
+
+engine3D::~engine3D(){    
+    delete pGUI;
+    pGUI = nullptr;
+}
+
+bool engine3D::run() const {
+    return device_->run();
+}
+
+void engine3D::beginScene(std::vector<int> colorBackground) {
+    driver_->beginScene(true, true, irr::video::SColor(colorBackground[0], colorBackground[1], colorBackground[2], colorBackground[3]));
+    pGUI->startGUI();
+}
+
+void engine3D::endScene() {
+    driver_->endScene();
+}
+
+void engine3D::drawAll() {
+    smgr_->drawAll();
+    guienv_->drawAll();
+    pGUI->drawAll();
+}
+
+void engine3D::setEventReceiver(inputController* er) {
+    device_->setEventReceiver(er);
+}
+
+irr::video::IVideoDriver* engine3D::getVideoDriver() {
+    return driver_;
+}
+
+IrrIMGUI::IIMGUIHandle* engine3D::getIMGUIhandle(){
+    return pGUI;
+}
+
+irr::scene::ISceneManager* engine3D::getSceneManager() {
+    return smgr_;
+}
+
+using DestructorFunc = void (*)(irr::IrrlichtDevice*);
+using irrDevice = std::unique_ptr<irr::IrrlichtDevice, DestructorFunc>;
+
+irrDevice* engine3D::getDevice(){
+    return &device_;
+}
+
+std::vector<uint32_t> engine3D::getWindowSize(){
+    irr::core::dimension2du sizeW = driver_->getScreenSize();
+    std::vector<uint32_t> size {sizeW.Width,sizeW.Height};
+    return size;
+}
+
+void engine3D::draw3DLine(float x1, float y1, float z1, float x2, float y2, float z2, uint32_t r, uint32_t g, uint32_t b) {
+    irr::video::SMaterial m;
+    m.Lighting = false;
+    driver_->setMaterial(m);
+    driver_->setTransform(irr::video::ETS_WORLD, irr::core::IdentityMatrix);
+
+    driver_->draw3DLine({x1, y1, z1}, {x2, y2, z2}, {255, r, g, b});
+}
+
+void engine3D::hideCursor(){
+    //device_.get()->getCursorControl()->setVisible( false );
+}
+
+void engine3D::drawText(std::string text, float w, float h, std::vector<int> color){
+    auto* font = device_.get()->getGUIEnvironment()->getFont("media/fonts/myfont.xml");
+    auto textdim = font->getDimension(irr::core::stringw(text.c_str()).c_str());
+    irr::core::dimension2du size = driver_->getScreenSize();
+    if(w<0){
+        w = size.Width+w;
+    }
+    if(h<0){
+        h = size.Height+h;
+    }
+    if (font){
+        font->draw(irr::core::stringw(text.c_str()).c_str(),
+            irr::core::rect<irr::s32>((w)-(textdim.Width/2),(h)-(textdim.Height/2),(w)-(textdim.Width/2),(h)-(textdim.Height/2)),
+            irr::video::SColor(color[0], color[1], color[2], color[3]));
+    }
+}
+
+void engine3D::drawTextCenter(std::string text, float offsetW, float offsetH, std::vector<int> color){
+    auto* font = device_.get()->getGUIEnvironment()->getFont("media/fonts/myfont.xml");
+    auto textdim = font->getDimension(irr::core::stringw(text.c_str()).c_str());
+    irr::core::dimension2du size = driver_->getScreenSize();
+
+    if (font){
+        font->draw(irr::core::stringw(text.c_str()).c_str(),
+            irr::core::rect<irr::s32>(((size.Width+offsetW)/2)-(textdim.Width/2),
+                                      ((size.Height+offsetH)/2)-(textdim.Height/2),
+                                      ((size.Width+offsetW)/2)-(textdim.Width/2),
+                                      ((size.Height+offsetH)/2)-(textdim.Height/2)),
+            irr::video::SColor(color[0], color[1], color[2], color[3]));
+    }
+}
+
+
+void engine3D::createSkyBox(){
+    driver_->setTextureCreationFlag(irr::video::ETCF_CREATE_MIP_MAPS, false);
+    skybox=smgr_->addSkyBoxSceneNode(
+        driver_->getTexture("media/maps/up.png"),
+        driver_->getTexture("media/maps/down.png"),
+        driver_->getTexture("media/maps/left.png"),
+        driver_->getTexture("media/maps/right.png"),
+        driver_->getTexture("media/maps/front.png"),
+        driver_->getTexture("media/maps/back.png"));
+    skybox->setVisible(true);
+    driver_->setTextureCreationFlag(irr::video::ETCF_CREATE_MIP_MAPS, true);
+}
+
+void engine3D::drawTextIMGUI(std::string text, std::vector<float> color, float w, float h){
+    // ImGuiWindowFlags window_flags = 0;
+    // window_flags |= ImGuiWindowFlags_NoBackground;
+    // window_flags |= ImGuiWindowFlags_NoTitleBar;
+    // window_flags |= ImGuiWindowFlags_NoCollapse;
+    // window_flags |= ImGuiWindowFlags_NoScrollbar;
+    // window_flags |= ImGuiWindowFlags_NoResize;
+    // window_flags |= ImGuiWindowFlags_NoMove;
+
+    // bool * open_ptr = nullptr;
+    // float width{(float)getWindowSize()[0]}, height{(float)getWindowSize()[1]};
+
+    // ImGui::PushStyleColor(ImGuiCol_WindowBg,{1.0f, 1.0f, 1.0f, 0.0f});
+    // ImGui::Begin("Interact", open_ptr,  window_flags);
+    // ImGui::SetWindowSize(ImVec2(width,height));
+    // ImGui::SetWindowPos(ImVec2(0,0));
+    // ImGui::SetWindowFontScale((width/1920)*4);
+    // ImVec2 textSize = ImGui::CalcTextSize(text.c_str());
+    // if(w<0){
+    //     w = width+w;
+    // }
+    // if(h<0){
+    //     h = height+h;
+    // }
+    // ImVec4 colorI {color[0], color[1], color[2], color[3]};
+    // ImGui::SetCursorPos(ImVec2(w-textSize.x/2,h-textSize.y/2));
+    // ImGui::TextColored(colorI,"%s", text);
+    // ImGui::End();
+    // ImGui::PopStyleColor(1);
+}
+

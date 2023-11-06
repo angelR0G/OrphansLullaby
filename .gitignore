@@ -1,0 +1,7 @@
+.vscode/*
+libs/
+media/
+obj/
+tools/
+imgui.ini
+options.txt

@@ -1,0 +1,17 @@
+#pragma once
+
+#include "../components/basic.hpp"
+#include "../components/movement.hpp"
+#include "../components/render.hpp"
+#include "../components/input.hpp"
+#include "../components/camera.hpp"
+#include "../components/sound.hpp"
+#include "../components/ai.hpp"
+#include "../components/weapon.hpp"
+#include "../components/collision.hpp"
+#include "../components/health.hpp"
+#include "../components/navigation.hpp"
+#include "../components/attack.hpp"
+#include "../components/trigger.hpp"
+#include "../components/animation.hpp"
+#include "../components/attackstats.hpp"
