@@ -71,6 +71,10 @@ void ShaderResource::setUniformMat4(int uniform, glm::mat4 const& mat){
     glUniformMatrix4fv(uniform, 1, GL_FALSE, &mat[0][0]);
 }
 
+void ShaderResource::setUniformVec2(int uniform, glm::vec2 const& vec){
+    glUniform2fv(uniform, 1, &vec[0]);
+}
+
 void ShaderResource::setUniformVec3(int uniform, glm::vec3 const& vec){
     glUniform3fv(uniform, 1, &vec[0]);
 }

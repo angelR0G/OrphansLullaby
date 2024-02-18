@@ -199,6 +199,27 @@ struct GraphicEngine {
                             uDepthCubeMaps      {},
                             uArePointLights     {};
 
+        // bloom variables
+        struct bloomMip
+        {
+            glm::vec2 size;
+            glm::ivec2 intSize;
+            unsigned int texture;
+        };
+        unsigned int mFBO;
+	    std::vector<bloomMip> mMipChain;
+        unsigned int pingpongFBO[2];
+        unsigned int pingpongColorbuffers[2];
+        float bloomFilterRadius = 0.001f;
+        bool mKarisAverageOnDownsample = true;
+        unsigned int quadVAO = 0;
+        unsigned int quadVBO;
+        // floating point buffers
+        unsigned int hdrFBO;
+        unsigned int colorBuffers[2];
+        unsigned int rboDepth;
+        unsigned int attachments[2] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
+
         // Debug variables
         GLint   uDebugView  {-1},
                 uDebugProj  {-1};
@@ -227,12 +248,24 @@ struct GraphicEngine {
         void initShadowsShaders();
         void initDebugShaders();
         void initVideoShaders();
+        void initBloomShaders(); // Bloom
         void initUi();
         void initVideoPlayer();
         void initDepthMapsBuffers();
         void initFrustrumCulling();
 		void freeDepthMapsBuffers();
         void freeDebugBuffers();
+
+        // bloom
+        void initBloomBlur();
+        bool initBloomFBO(Size2D screen_size, unsigned int mipChainLength);
+        void initBloomBuffers();
+        // Render bloom
+        void renderBloom();
+        void renderBloomTexture(unsigned int srcTexture, float filterRadius);
+        void renderDownSamples(unsigned int srcTexture);
+        void renderUpSamples(float filterRadius);
+        void renderQuad();
 
         void renderSceneEntities(ShaderResource* shader, bool useFrustum = true) const noexcept;
         void generateDepthMap();

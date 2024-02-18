@@ -25,10 +25,14 @@ struct AnimationResource;
 #define PROGRAM_POINT_SHADOWS       4
 #define PROGRAM_DEBUG_LINES         5
 #define PROGRAM_VIDEO_PLAYER        6
+#define PROGRAM_BLUR                7
+#define PROGRAM_BLOOM               8
+#define PROGRAM_DOWNSAMPLE          9
+#define PROGRAM_UPSAMPLE            10
 
 struct ResourceManager{
     using resourcesMap      = std::unordered_map<std::string, std::unique_ptr<Resource>>;
-    using programContainer  = std::array<std::unique_ptr<ProgramResource>, 7>;
+    using programContainer  = std::array<std::unique_ptr<ProgramResource>, 11>;
 
     static ResourceManager* Instance();
     ~ResourceManager();
@@ -49,7 +53,10 @@ struct ResourceManager{
         ResourceManager();
     private:
         inline static std::unique_ptr<ResourceManager> pResourceManager{nullptr};
-        programContainer programs{nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
+        programContainer programs{  nullptr, nullptr, nullptr, 
+                                    nullptr, nullptr, nullptr, 
+                                    nullptr, nullptr, nullptr,
+                                    nullptr, nullptr};
         resourcesMap resources;
         
         Resource* getResource(std::string);

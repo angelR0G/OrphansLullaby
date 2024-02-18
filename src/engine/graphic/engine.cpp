@@ -54,21 +54,29 @@ using namespace GE;
 
 const std::string shadersPath = "media/shaders/";
 const std::vector<std::string> shadersFile = {
-    "vertex.glsl",
-    "fragmentPBR.glsl",
-    "vertexSkyBox.glsl",
-    "fragmentSkyBox.glsl",
-    "vertexParticles.glsl",
-    "fragmentParticles.glsl",
-    "vertexShadow.glsl",
-    "fragmentShadow.glsl",
-    "vertexPointShadow.glsl",
-    "fragmentPointShadow.glsl",
-    "geometryPointShadow.glsl",
-    "vertexDebug.glsl",
-    "fragmentDebug.glsl",
-    "vertexVideo.glsl",
-    "fragmentVideo.glsl"
+    "vertex.glsl",              //0 ->Regular vertex shader
+    "fragmentPBR.glsl",         //1 ->Regular fragment shader
+    "vertexSkyBox.glsl",        //2 ->vertex shader for rendering the skybox
+    "fragmentSkyBox.glsl",      //3 ->fragment shader for rendering the skybox
+    "vertexParticles.glsl",     //4 ->vertex shader for particles
+    "fragmentParticles.glsl",   //5 ->fragment shader for particles
+    "vertexShadow.glsl",        //6 ->vertex shader shadows
+    "fragmentShadow.glsl",      //7 ->fragment shader shadows
+    "vertexPointShadow.glsl",   //8 ->vertex shader for point lights shadows
+    "fragmentPointShadow.glsl", //9 ->fragment shader for point lights shadows
+    "geometryPointShadow.glsl", //10->geometry shader for point lights shadows
+    "vertexDebug.glsl",         //11->vertex shader for debug (render debug lines)
+    "fragmentDebug.glsl",       //12->fragment shader for debug (render debug lines)
+    "vertexVideo.glsl",         //13->vertex shader for video
+    "fragmentVideo.glsl",       //14->fragment shader for video
+    "vertexBlur.glsl",          //15->vertex shader for blur calculations
+    "fragmentBlur.glsl",        //16->fragment shader for blur calculations
+    "vertexBloom.glsl",         //17->vertex shader for bloom
+    "fragmentBloom.glsl",       //18->fragment shader for bloom
+    "new_downsample.vs",        //19->
+    "new_downsample.fs",        //20->
+    "new_upsample.vs",          //21->
+    "new_upsample.fs",          //22->
 };
 
 #define SHADER(file) shadersPath + file
@@ -380,10 +388,10 @@ void GraphicEngine::postRender() {
 void GraphicEngine::render(){
     if(activeCamera == nullptr) return;
 
-    ShaderResource* vShader     = resourceMan->getShader(SHADER(shadersFile[0]), GL_VERTEX_SHADER);
-    ShaderResource* vShaderPart = resourceMan->getShader(SHADER(shadersFile[4]), GL_VERTEX_SHADER);
+    ShaderResource* vShader     = resourceMan->getShader(SHADER(shadersFile[0]),  GL_VERTEX_SHADER);
+    ShaderResource* vShaderPart = resourceMan->getShader(SHADER(shadersFile[4]),  GL_VERTEX_SHADER);
     ShaderResource* vShaderDebug= resourceMan->getShader(SHADER(shadersFile[11]), GL_VERTEX_SHADER);
-
+    
     generateDepthMap();
     
     // Activate program
@@ -417,10 +425,38 @@ void GraphicEngine::render(){
 
     // Draw scene
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, hdrFBO);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
     renderSceneEntities(vShader);
+    
+    renderBloom();
     
     //Render skybox at last
     drawSkyBox();
+}
+
+void GraphicEngine::renderBloom(){
+    ShaderResource* vShaderBloom= resourceMan->getShader(SHADER(shadersFile[17]), GL_VERTEX_SHADER);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    renderBloomTexture(colorBuffers[1], bloomFilterRadius);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    unsigned int bloomFinalProgram = resourceMan->getProgram(PROGRAM_BLOOM)->getProgramId();
+    glUseProgram(bloomFinalProgram);
+    glActiveTexture(GL_TEXTURE0);
+    //glBindTexture(GL_TEXTURE_2D, colorBuffers[0]);
+    glUniform1i(glGetUniformLocation(bloomFinalProgram, "scene"), 0);
+    glBindTexture(GL_TEXTURE_2D, colorBuffers[0]);
+
+    // PH_BLOOM
+    glActiveTexture(GL_TEXTURE1);
+    glUniform1i(glGetUniformLocation(bloomFinalProgram, "bloomBlur"), 1);
+    glBindTexture(GL_TEXTURE_2D, mMipChain[0].texture);
+
+    vShaderBloom->setUniformFloat(glGetUniformLocation(resourceMan->getProgram(PROGRAM_BLOOM)->getProgramId(), "exposure"), 10.0f);
+    renderQuad();
+    glActiveTexture(GL_TEXTURE0);
 }
 
 void GraphicEngine::renderSceneEntities(ShaderResource* shader, bool useFrustum) const noexcept {
@@ -765,6 +801,7 @@ void GraphicEngine::initShaders(){
     initShadowsShaders();
     initDebugShaders();
     initVideoShaders();
+    initBloomShaders();
 }
 
 void GraphicEngine::initShadersSkyBox(){
@@ -849,6 +886,176 @@ void GraphicEngine::initDebugShaders() {
     uDebugView      = glGetUniformLocation(program->getProgramId(), "view");
     uDebugProj      = glGetUniformLocation(program->getProgramId(), "projection");
 }
+
+void GraphicEngine::initBloomShaders(){
+
+    // Initialize bloom frame buffer object
+    const unsigned int numBloomMips = 3;//6->default
+    bool bloomFBO_State = initBloomFBO(getWindowSize(), numBloomMips);
+    if (!bloomFBO_State) {
+        assert("Cannot init bloom shaders");
+    }
+
+    // Load vertex and fragment shader for blur
+    ShaderResource*  vertexShader   = resourceMan->getShader(SHADER(shadersFile[15]), GL_VERTEX_SHADER);
+    ShaderResource*  fragmentShader = resourceMan->getShader(SHADER(shadersFile[16]), GL_FRAGMENT_SHADER);
+
+    // Create a program
+    ProgramResource* program = resourceMan->getProgram(PROGRAM_BLUR);
+    program->initProgram({vertexShader->getShaderId(), fragmentShader->getShaderId()});
+    
+    // Load vertex and fragment shader for bloom
+    vertexShader   = resourceMan->getShader(SHADER(shadersFile[17]), GL_VERTEX_SHADER);
+    fragmentShader = resourceMan->getShader(SHADER(shadersFile[18]), GL_FRAGMENT_SHADER);
+
+    // Create a program
+    program = resourceMan->getProgram(PROGRAM_BLOOM);
+    program->initProgram({vertexShader->getShaderId(), fragmentShader->getShaderId()});
+
+    // Create bloom downsample
+    vertexShader   = resourceMan->getShader(SHADER(shadersFile[19]), GL_VERTEX_SHADER);
+    fragmentShader = resourceMan->getShader(SHADER(shadersFile[20]), GL_FRAGMENT_SHADER);
+
+    program = resourceMan->getProgram(PROGRAM_DOWNSAMPLE);
+    program->initProgram({vertexShader->getShaderId(), fragmentShader->getShaderId()});
+    unsigned int programID = resourceMan->getProgram(PROGRAM_DOWNSAMPLE)->getProgramId();
+    glUseProgram(programID);
+    fragmentShader->setUniformInt(glGetUniformLocation(programID, "srcTexture"), 0);
+    // Create bloom upsample
+    vertexShader   = resourceMan->getShader(SHADER(shadersFile[21]), GL_VERTEX_SHADER);
+    fragmentShader = resourceMan->getShader(SHADER(shadersFile[22]), GL_FRAGMENT_SHADER);
+
+    program = resourceMan->getProgram(PROGRAM_UPSAMPLE);
+    program->initProgram({vertexShader->getShaderId(), fragmentShader->getShaderId()});
+    programID = resourceMan->getProgram(PROGRAM_UPSAMPLE)->getProgramId();
+    glUseProgram(programID);
+    fragmentShader->setUniformInt(glGetUniformLocation(programID, "srcTexture"), 0);
+    glUseProgram(0);
+
+
+    initBloomBuffers();
+    initBloomBlur();
+}
+
+void GraphicEngine::renderDownSamples(unsigned int srcTexture)
+{
+    Size2D windowSize = getWindowSize();
+
+	ShaderResource*  vertexShader   = resourceMan->getShader(SHADER(shadersFile[19]), GL_VERTEX_SHADER);
+    ShaderResource*  fragmentShader = resourceMan->getShader(SHADER(shadersFile[20]), GL_FRAGMENT_SHADER);
+    unsigned int programID = resourceMan->getProgram(PROGRAM_DOWNSAMPLE)->getProgramId();
+	glUseProgram(programID);
+    
+	fragmentShader->setUniformVec2(glGetUniformLocation(programID, "srcResolution"), glm::vec2(windowSize.width, windowSize.height));
+	if (mKarisAverageOnDownsample) {
+        
+		fragmentShader->setUniformInt(glGetUniformLocation(programID, "mipLevel"), 0);
+	}
+
+	// Bind srcTexture (HDR color buffer) as initial texture input
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, srcTexture);
+    glDisable(GL_BLEND);
+	// Progressively downsample through the mip chain
+	for (int i = 0; i < (int)mMipChain.size(); i++)
+	{
+		const bloomMip& mip = mMipChain[i];
+		glViewport(0, 0, mip.size.x, mip.size.y);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+		                       GL_TEXTURE_2D, mip.texture, 0);
+
+		// Render screen-filled quad of resolution of current mip
+		renderQuad();
+
+		// Set current mip resolution as srcResolution for next iteration
+		fragmentShader->setUniformVec2(glGetUniformLocation(programID, "srcResolution"), mip.size);
+		// Set current mip as texture input for next iteration
+		glBindTexture(GL_TEXTURE_2D, mip.texture);
+		// Disable Karis average for consequent downsamples
+		if (i == 0) { fragmentShader->setUniformInt(glGetUniformLocation(programID, "mipLevel"), 1); }
+	}
+    glEnable(GL_BLEND);
+	glUseProgram(0);
+}
+
+void GraphicEngine::renderUpSamples(float filterRadius)
+{
+    ShaderResource*  vertexShader   = resourceMan->getShader(SHADER(shadersFile[21]), GL_VERTEX_SHADER);
+    ShaderResource*  fragmentShader = resourceMan->getShader(SHADER(shadersFile[22]), GL_FRAGMENT_SHADER);
+    unsigned int programID = resourceMan->getProgram(PROGRAM_DOWNSAMPLE)->getProgramId();
+	glUseProgram(programID);
+    
+	fragmentShader->setUniformFloat(glGetUniformLocation(programID, "filterRadius"), filterRadius);
+
+	// Enable additive blending
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_ONE, GL_ONE);
+	glBlendEquation(GL_FUNC_ADD);
+
+	for (int i = (int)mMipChain.size() - 1; i > 0; i--)
+	{
+		const bloomMip& mip = mMipChain[i];
+		const bloomMip& nextMip = mMipChain[i-1];
+
+		// Bind viewport and texture from where to read
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, mip.texture);
+
+		// Set framebuffer render target (we write to this texture)
+		glViewport(0, 0, nextMip.size.x, nextMip.size.y);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+		                       GL_TEXTURE_2D, nextMip.texture, 0);
+
+		// Render screen-filled quad of resolution of current mip
+		renderQuad();
+	}
+
+	// Disable additive blending
+	//glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+	glDisable(GL_BLEND);
+
+	glUseProgram(0);
+}
+
+void GraphicEngine::renderBloomTexture(unsigned int srcTexture, float filterRadius)
+{   
+    Size2D screenSize = getWindowSize();
+	glBindFramebuffer(GL_FRAMEBUFFER, mFBO);
+
+	renderDownSamples(srcTexture);
+	renderUpSamples(filterRadius);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	// Restore viewport
+	glViewport(0, 0, screenSize.width, screenSize.height);
+}
+
+void GraphicEngine::renderQuad() {
+    if (quadVAO == 0)
+    {
+        float quadVertices[] = {
+            // positions        // texture Coords
+            -1.0f,  1.0f, 0.0f, 0.0f, 1.0f,
+            -1.0f, -1.0f, 0.0f, 0.0f, 0.0f,
+             1.0f,  1.0f, 0.0f, 1.0f, 1.0f,
+             1.0f, -1.0f, 0.0f, 1.0f, 0.0f,
+        };
+        // setup plane VAO
+        glGenVertexArrays(1, &quadVAO);
+        glGenBuffers(1, &quadVBO);
+        glBindVertexArray(quadVAO);
+        glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), &quadVertices, GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+    }
+    glBindVertexArray(quadVAO);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    glBindVertexArray(0);
+}
+
 
 GE::SceneNode* GraphicEngine::addSceneNode(GE::SceneNode* parent) {
     SceneNode* node{nullptr};
@@ -1306,6 +1513,116 @@ void GraphicEngine::freeDebugBuffers() {
 
     debugVAO = debugVBO = 0;
 }
+
+// bloom
+void GraphicEngine::initBloomBlur() {
+    Size2D screen_size = getWindowSize();
+    glGenFramebuffers(2, pingpongFBO);
+    glGenTextures(2, pingpongColorbuffers);
+    for (unsigned int i = 0; i < 2; i++)
+    {
+        glBindFramebuffer(GL_FRAMEBUFFER, pingpongFBO[i]);
+        glBindTexture(GL_TEXTURE_2D, pingpongColorbuffers[i]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, screen_size.width, screen_size.width, 0, GL_RGBA, GL_FLOAT, NULL);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); // we clamp to the edge as the blur filter would otherwise sample repeated texture values!
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, pingpongColorbuffers[i], 0);
+        
+    }
+}
+
+bool GraphicEngine::initBloomFBO(Size2D screen_size, unsigned int mipChainLength){
+    glGenFramebuffers(1, &mFBO);
+	glBindFramebuffer(GL_FRAMEBUFFER, mFBO);
+
+	glm::vec2 mipSize((float)screen_size.width, (float)screen_size.height);
+	glm::ivec2 mipIntSize((int)screen_size.width, (int)screen_size.height);
+	// Safety check
+	if (screen_size.width > (unsigned int)INT_MAX || screen_size.height > (unsigned int)INT_MAX) {
+		//std::cerr << "Window size conversion overflow - cannot build bloom FBO!" << std::endl;
+		assert("Window size conversion overflow - cannot build bloom FBO");
+        return false;
+	}
+
+	for (GLuint i = 0; i < mipChainLength; i++)
+	{
+		bloomMip mip;
+
+		mipSize *= 0.5f;
+		mipIntSize /= 2;
+		mip.size = mipSize;
+		mip.intSize = mipIntSize;
+
+		glGenTextures(1, &mip.texture);
+		glBindTexture(GL_TEXTURE_2D, mip.texture);
+		// we are downscaling an HDR color buffer, so we need a float texture format
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_R11F_G11F_B10F,
+		             (int)mipSize.x, (int)mipSize.y,
+		             0, GL_RGB, GL_FLOAT, nullptr);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+		
+		mMipChain.emplace_back(mip);
+	}
+
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+	                       GL_TEXTURE_2D, mMipChain[0].texture, 0);
+
+	// setup attachments
+	unsigned int attachments[1] = { GL_COLOR_ATTACHMENT0 };
+	glDrawBuffers(1, attachments);
+
+	// check completion status
+	int status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+	if (status != GL_FRAMEBUFFER_COMPLETE)
+	{
+		printf("gbuffer FBO error, status: 0x%x\n", status);
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		return false;
+	}
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	return true;
+}
+
+void GraphicEngine::initBloomBuffers(){
+
+
+    Size2D screen_size = getWindowSize();
+    
+    // configure (floating point) framebuffers
+    // ---------------------------------------
+    glGenFramebuffers(1, &hdrFBO);
+    glBindFramebuffer(GL_FRAMEBUFFER, hdrFBO);
+    // create 2 floating point color buffers (1 for normal rendering, other for brightness threshold values)
+    glGenTextures(2, colorBuffers);
+    for (unsigned int i = 0; i < 2; i++)
+    {
+        glBindTexture(GL_TEXTURE_2D, colorBuffers[i]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, screen_size.width, screen_size.height, 0, GL_RGBA, GL_FLOAT, NULL);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);  // we clamp to the edge as the blur filter would otherwise sample repeated texture values!
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        // attach texture to framebuffer
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, GL_TEXTURE_2D, colorBuffers[i], 0);
+    }
+    // create and attach depth buffer (renderbuffer)
+    glGenRenderbuffers(1, &rboDepth);
+    glBindRenderbuffer(GL_RENDERBUFFER, rboDepth);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, screen_size.width, screen_size.height);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rboDepth);
+    // tell OpenGL which color attachments we'll use (of this framebuffer) for rendering 
+    glDrawBuffers(2, attachments);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
 
 void GraphicEngine::initSkyBox(){
     glGenVertexArrays(1, &skyboxVAO);

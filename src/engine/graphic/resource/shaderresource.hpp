@@ -18,6 +18,7 @@ struct ShaderResource : public Resource{
     void setUniformVec4(int, glm::vec4 const&);
     void setUniformFloat(int, float const&);
     void setUniformInt(int, int const&);
+    void setUniformVec2(int, glm::vec2 const&);
     private:
         int idShader;
 };

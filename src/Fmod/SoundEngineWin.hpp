@@ -8,9 +8,12 @@ Include section
 
 #pragma once
 
-#include <linux/fmod/inc/fmod_studio.hpp>
-#include <linux/fmod/core/inc/fmod.hpp>
-#include <linux/fmod/core/inc/fmod_errors.h>
+extern "C"{
+    #include <windows/fmod/inc/fmod_studio.h>
+    #include <windows/fmod/core/inc/fmod.h>
+    #include <windows/fmod/core/inc/fmod_errors.h>
+}
+
 #include <vector>
 #include <cstdint>
 #include <string>
@@ -26,7 +29,7 @@ Include section
 #define VCA_MUSIC_ROUTE           1
 #define VCA_DIALOGUES_ROUTE       2
 #define VCA_AMBIENT_ROUTE         3
-#define VCA_MASTER_ROUTE          3
+#define VCA_MASTER_ROUTE          4
 
 //Routes for non-ECS-dependant sounds
 #define MENU_MUSIC                "event:/Música/Musica Menu Principal"
@@ -34,15 +37,15 @@ Include section
 #define MENU_ACCEPT               "event:/Menús/Aceptar"
 #define MENU_REFUSE               "event:/Menús/Cancelar"
 
-
 using namespace std;
 
 //For playing dialogues
 struct ProgrammerSoundContext{
-    FMOD::System* coreSys;
-    FMOD::Studio::System* sys;
+    FMOD_SYSTEM* coreSys;
+    FMOD_STUDIO_SYSTEM* sys;
     const char* dialogueString;
 };
+
 
 class SoundEngine{
 
@@ -65,7 +68,7 @@ class SoundEngine{
         /*
         Bank management
         */
-        void loadBank(string); 
+        void loadBank(string);
         void unloadBank(string);
         void loadBasicBanks();
 
@@ -88,7 +91,7 @@ class SoundEngine{
         void stopSound(uint16_t);
         uint16_t prepareDialogue(string, uint16_t);
         void playDialogue(uint16_t, uint16_t, uint16_t);
-        FMOD::Studio::EventDescription* getDescriptor(uint16_t);
+        FMOD_STUDIO_EVENTDESCRIPTION* getDescriptor(uint16_t);
         void playMenuSound(bool, string);
         void stopMenuSound(string);
 
@@ -119,21 +122,21 @@ class SoundEngine{
         Callbacks
         */
         static FMOD_RESULT F_CALLBACK programmerSoundCallback(FMOD_STUDIO_EVENT_CALLBACK_TYPE type, FMOD_STUDIO_EVENTINSTANCE* event, void *parameters);
-        
+
     private:
         /*
         Sound engine essentials
         */
         void *extraDriverData;
-        FMOD::Studio::System* system;
-        FMOD::System* coreSystem;
+        FMOD_STUDIO_SYSTEM* system;
+        FMOD_SYSTEM* coreSystem;
 
         /*
         Storage
         */
-        std::unordered_map<string, FMOD::Studio::Bank*> banks;
-        std::unordered_map<uint16_t, FMOD::Studio::EventDescription*> eventDescriptions;
-        std::vector<FMOD::Studio::EventInstance*> eventInstances;
+        std::unordered_map<string, FMOD_STUDIO_BANK*> banks;
+        std::unordered_map<uint16_t, FMOD_STUDIO_EVENTDESCRIPTION*> eventDescriptions;
+        std::vector<FMOD_STUDIO_EVENTINSTANCE*> eventInstances;
 
         /*
         Vector for the dialogue selection:
@@ -155,7 +158,7 @@ class SoundEngine{
         */
         FMOD_STUDIO_PARAMETER_DESCRIPTION paramDesc;
         FMOD_STUDIO_PARAMETER_ID parameterID;
-        ProgrammerSoundContext programmerSoundContext;      
+        ProgrammerSoundContext programmerSoundContext;
 };
 
 
