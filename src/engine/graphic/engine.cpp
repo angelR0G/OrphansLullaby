@@ -431,10 +431,10 @@ void GraphicEngine::render(){
 
     renderSceneEntities(vShader);
     
-    renderBloom();
-    
     //Render skybox at last
     drawSkyBox();
+    renderBloom();
+    
 }
 
 void GraphicEngine::renderBloom(){
